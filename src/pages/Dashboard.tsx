@@ -61,28 +61,75 @@ const Dashboard = () => {
   
     const handleVideoUpload = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        const form = new FormData();
-        form.append('title', videoForm.title);
-        form.append('description', videoForm.description);
-        if (videoForm.thumbnail && videoForm.videoFile) {
-            form.append('image', videoForm.thumbnail);
-            form.append('video', videoForm.videoFile);
-        }
-
         try {
             const token = localStorage.getItem('jwt');
-            const response = await axios.post(
-                `${import.meta.env.VITE_BACKEND_URL}/api/v1/video/upload`,
-                form,
+            const videoResponse = await axios.post(
+                `${import.meta.env.VITE_BACKEND_URL}/api/v1/video/url`,
+                {
+                    fileName: videoForm.videoFile?.name
+                },
                 {
                     headers: { 
-                        "Content-Type": "multipart/form-data",
+                        "Content-Type": "application/json",
                         Authorization: token
                     },
                     withCredentials: true,
                 }
-            );            
+            );
+            const imageResponse = await axios.post(
+                `${import.meta.env.VITE_BACKEND_URL}/api/v1/video/url`,
+                {
+                    fileName: videoForm.thumbnail?.name
+                },
+                {
+                    headers: { 
+                        "Content-Type": "application/json",
+                        Authorization: token
+                    },
+                    withCredentials: true,
+                }
+            );
+
+            const videoSignedUrl = videoResponse.data.signedUrl;
+            const videoKey = videoResponse.data.key;
+            const imageSignedUrl = imageResponse.data.signedUrl;
+            const imageKey = imageResponse.data.key;
+
+            console.log("got response:", videoSignedUrl, videoKey, imageSignedUrl, imageKey);
+            console.log("types: ", videoForm.videoFile?.type, videoForm.thumbnail?.type);
+
+            await axios.put(videoSignedUrl, videoForm.videoFile, {
+                headers: {
+                    'Content-Type': videoForm.videoFile?.type,
+                    'x-amz-acl': 'public-read'
+                },
+                withCredentials: false
+            });
+            await axios.put(imageSignedUrl, videoForm.thumbnail, {
+                headers: {
+                    'Content-Type': videoForm.thumbnail?.type,
+                    'x-amz-acl': 'public-read'
+                },
+                withCredentials: false
+            });
+
+            console.log("uploaded to s3");
+
+            const response = await axios.post(
+                `${import.meta.env.VITE_BACKEND_URL}/api/v1/video/uploads`,{
+                    title: videoForm.title,
+                    description: videoForm.description,
+                    imageKey: imageKey,
+                    videoKey: videoKey
+                },
+                {
+                    headers: { 
+                        "Content-Type": "application/json",
+                        Authorization: token
+                    },
+                    withCredentials: true,
+                }
+            );
 
             if (response.data && response.data.video) {
                 const newVideo = {
